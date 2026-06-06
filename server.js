@@ -10,6 +10,9 @@ app.use(express.static(__dirname));
 
 /*const BASE_URL = "http://127.0.0.1:54537/api2";*/
 const BASE_URL = process.env.BASE_URL;
+if (!BASE_URL) {
+  throw new Error("BASE_URL is not set in environment variables");
+}
 const API_KEY =
   "CgpGcmVlbGFuY2VyEhIJyYaeAV+DP3sRjA+15lzYBiEaEgnJhp4BgYOheRGn2cOtX3g5BA==";
 
@@ -178,7 +181,7 @@ function extract1099Fields(supplier) {
     const digits =
       v.replace(/\D/g, "");
 
-    if ( !taxId && /^\d{2}\d{7}$/.test(digits) ) {
+    if (!taxId && /^\d{2}\d{7}$/.test(digits)) {
       taxId = v;
     }
   }
@@ -189,7 +192,7 @@ function extract1099Fields(supplier) {
     supplierType
   };
 }
-	  
+
 /* =========================
    DATE FILTER
 ========================= */
@@ -275,18 +278,18 @@ app.get("/1099-report", async (req, res) => {
       }
 
       const {
-		  taxId,
-		  taxStatus,
-		  supplierType
-		} = extract1099Fields(supplier);
+        taxId,
+        taxStatus,
+        supplierType
+      } = extract1099Fields(supplier);
 
       if (
-		  !requires1099(
-			taxStatus,
-			supplierType
-		  )
+        !requires1099(
+          taxStatus,
+          supplierType
+        )
       ) {
-		  continue;
+        continue;
       }
 
       const supplierName =
@@ -363,7 +366,7 @@ app.get("/1099-export.csv", async (req, res) => {
 
     const reportData =
       await get(
-        `http://127.0.0.1:3001/1099-report?start=${startDate}&end=${endDate}`
+        `${BASE_SELF_URL}/1099-report?start=${startDate}&end=${endDate}`
       );
 
     let csv =
@@ -404,12 +407,10 @@ app.get("/1099-export.csv", async (req, res) => {
    START SERVER
 ========================= */
 
-app.listen(
-  3001,
-  "127.0.0.1",
-  () => {
-    console.log(
-      "IRS 1099 ENGINE running on http://127.0.0.1:3001"
-    );
-  }
-);
+const PORT = process.env.PORT || 3001;
+
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(
+    `IRS 1099 ENGINE running on http://localhost:${PORT}`
+  );
+});
