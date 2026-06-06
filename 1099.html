@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>1099 IRS Engine</title>
+
+  <style>
+    body {
+      font-family: Arial;
+      padding: 20px;
+    }
+
+    .card {
+      border: 1px solid #ddd;
+      padding: 10px;
+      margin-bottom: 10px;
+      border-radius: 6px;
+    }
+
+    .total {
+      font-weight: bold;
+      margin-top: 5px;
+    }
+/*
+    button {
+      margin: 5px;
+      padding: 10px;
+      cursor: pointer;
+    }
+*/
+    label {
+      margin-right: 5px;
+      font-weight: bold;
+    }
+
+    /* Select specific text-based input types to avoid accidentally styling checkboxes or buttons */
+input[type="text"], 
+input[type="date"], 
+input[type="email"], 
+input[type="password"], 
+input[type="number"], 
+input[type="tel"], 
+input[type="url"] {
+  /* Box Model & Sizing */
+  box-sizing: border-box; /* Includes padding and border in the element's total width */
+  padding: 10px 14px;
+  
+  /* Typography */
+  font-family: inherit; /* Forces input to use your main body font */
+  font-size: 16px; /* Prevents iOS browsers from auto-zooming on focus */
+  color: #333333;
+  
+  /* Visual Borders & Background */
+  background-color: #ffffff;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  
+  /* Smooth transitions for interactive states */
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+/* Base Button Styling */
+.custom-button {
+  /* Layout & Alignment */
+  display: inline-block;
+  padding: 12px 24px;
+  text-align: center;
+  text-decoration: none;
+  vertical-align: middle;
+
+  /* Typography */
+  font-family: 'Segoe UI', Roboto, sans-serif;
+  font-size: 16px;
+  font-weight: 600;
+  
+  /* Colors & Borders */
+  color: #ffffff;
+  background-color: #007bff;
+  border: none;
+  border-radius: 6px;
+  
+  /* Interactive Elements */
+  cursor: pointer;
+  user-select: none;
+  transition: background-color 0.2s ease, transform 0.1s ease;
+}
+
+/* Hover State (Mouse-over) */
+.custom-button:hover {
+  background-color: #0056b3;
+}
+
+/* Active State (When clicked) */
+.custom-button:active {
+  transform: scale(0.98);
+}
+
+/* Focus State (Keyboard Navigation) */
+.custom-button:focus-visible {
+  outline: 3px solid #9fcdff;
+}
+
+/* Disabled State */
+.custom-button:disabled {
+  background-color: #cccccc;
+  color: #666666;
+  cursor: not-allowed;
+}
+
+    .summary {
+      background: #f5f5f5;
+      padding: 10px;
+      margin-bottom: 20px;
+      border-radius: 6px;
+      max-width: 350px;
+    }
+
+    .summary-plain {
+      padding: 10px;
+      margin-bottom: 20px;
+      border-radius: 6px;
+      text-align: right;
+    }
+
+    .warning {
+      color: red;
+      font-weight: bold;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 15px;
+    }
+
+    th,td {
+      border: 1px solid #999;
+      padding: 6px 8px;
+    }
+
+    th {
+      text-align: left;
+      font-weight: bold;
+    }
+  </style>
+</head>
+
+<body>
+
+<h2>IRS 1099 Engine</h2>
+
+<label>Start Date</label>
+<input type="date" id="startDate">
+
+<label>End Date</label>
+<input type="date" id="endDate">
+
+<button class="custom-button" onclick="loadReport()">Load Report</button>
+<button class="custom-button" onclick="exportCSV()">Export CSV</button>
+
+<hr>
+
+<div id="summary"></div>
+
+<div id="output"></div>
+
+<script>
+
+let reportData = [];
+
+/* =========================
+   DEFAULT TAX YEAR
+========================= */
+
+window.addEventListener("load", () => {
+
+  const currentYear = new Date().getFullYear();
+
+  document.getElementById("startDate").value =
+    `${currentYear}-01-01`;
+
+  document.getElementById("endDate").value =
+    `${currentYear}-12-31`;
+
+  loadReport();
+});
+
+/* =========================
+   LOAD REPORT
+========================= */
+
+async function loadReport() {
+
+  const startDate =
+    document.getElementById("startDate").value;
+
+  const endDate =
+    document.getElementById("endDate").value;
+
+  const url = `http://127.0.0.1:3001/1099-report?start=${startDate}&end=${endDate}`;
+
+  const res = await fetch(url);
+
+  const data = await res.json();
+
+  console.log("IRS REPORT:", data);
+
+  reportData = data.report || [];
+
+  document.getElementById("summary").innerHTML = `
+    <div class="summary">
+      <div><b>Generated:</b> ${data.generatedAt || ""}</div>
+      <div><b>Tax Year Range:</b> ${startDate} to ${endDate}</div>
+      <div><b>1099 Recipients:</b> ${data.totalSuppliers || 0}</div>
+    </div>
+  `;
+
+  render(reportData);
+
+  notifyManager();
+}
+
+/* =========================
+   RENDER REPORT
+========================= */
+
+function render(report) {
+
+  const el = document.getElementById("output");
+
+  if (!report.length) {
+    el.innerHTML =
+      "<p>No reportable suppliers found.</p>";
+    return;
+  }
+
+  const groups = {};
+
+  report.forEach(r => {
+
+    if (!groups[r.formType]) {
+      groups[r.formType] = [];
+    }
+
+    groups[r.formType].push(r);
+  });
+
+  let html = "";
+
+  Object.keys(groups)
+    .sort()
+    .forEach(formType => {
+
+      const vendors = groups[formType];
+
+      const formTotal =
+        vendors.reduce(
+          (sum, v) => sum + Number(v.total || 0),
+          0
+        );
+
+      html += `
+        <h3 style="margin-top:30px">
+          ${formType}
+        </h3>
+
+        <div class="summary-plain">
+          <b>Recipients:&nbsp;</b>
+          ${vendors.length}
+
+          <b>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Total Reportable Amount:&nbsp;</b>
+          $${formTotal.toLocaleString(
+            "en-US",
+            {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2
+            }
+          )}
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th>Supplier</th>
+              <th>Tax ID</th>
+              <th>Box</th>
+              <th style="text-align:right">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+      `;
+
+      vendors.forEach(r => {
+
+        const taxIdDisplay =
+          r.taxId
+            ? r.taxId
+            : '<span class="warning">MISSING ⚠️</span>';
+
+        const total =
+          Number(r.total || 0)
+            .toLocaleString(
+              "en-US",
+              {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+              }
+            );
+
+        html += `
+          <tr>
+            <td><b>${r.supplierName}</b></td>
+            <td>${taxIdDisplay}</td>
+            <td>${r.box}</td>
+            <td style="text-align:right">
+              $${total}
+            </td>
+          </tr>
+        `;
+      });
+
+      html += `
+          </tbody>
+
+          <tfoot>
+            <tr>
+              <td colspan="3" style="text-align:right">
+                <b>${formType} Total</b>
+              </td>
+
+              <td style="text-align:right">
+                <b>$${formTotal.toLocaleString(
+                  "en-US",
+                  {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2
+                  }
+                )}</b>
+              </td>
+            </tr>
+          </tfoot>
+
+        </table>
+      `;
+    });
+
+  el.innerHTML = html;
+}
+
+/* =========================
+   EXPORT CSV
+========================= */
+
+function exportCSV() {
+
+  const startDate =
+    document.getElementById("startDate").value;
+
+  const endDate =
+    document.getElementById("endDate").value;
+
+  window.open(
+    `http://127.0.0.1:3001/1099-export.csv?startDate=${startDate}&endDate=${endDate}`,
+    "_blank"
+  );
+}
+
+/* =========================
+   MANAGER.IO IFRAME BRIDGE
+========================= */
+
+window.addEventListener("message", (event) => {
+  // console.log(event.data);
+});
+
+function notifyManager() {
+
+  window.parent.postMessage({
+    type: "1099-ready",
+    total: reportData.length
+  }, "*");
+}
+
+</script>
+
+</body>
+</html>
